@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReviewIQ | Enterprise Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PDF Generation Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#0f172a',
+                            primary: '#059669',
+                            light: '#f8fafc'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .tab-active { border-bottom: 2px solid #059669; color: #059669; font-weight: bold; }
+        .tab-inactive { color: #64748b; }
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        @keyframes slideIn { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-800">
+
+    <!-- Top Navigation -->
+    <nav class="bg-brand-dark text-white px-6 py-4 shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="bg-emerald-500 p-2 rounded-lg">
+                    <i data-lucide="bar-chart-3" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">ReviewIQ</h1>
+                    <p class="text-xs text-slate-400">Enterprise Sentiment Engine</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-6 text-sm font-medium">
+                <button onclick="switchTab('tab-overview')" id="nav-overview" class="tab-active pb-1 flex items-center gap-2 transition-colors hover:text-emerald-400">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Overview
+                </button>
+                <button onclick="switchTab('tab-trends')" id="nav-trends" class="tab-inactive pb-1 flex items-center gap-2 transition-colors hover:text-emerald-400">
+                    <i data-lucide="trending-up" class="w-4 h-4"></i> Trend Engine
+                </button>
+                <button onclick="switchTab('tab-crossprod')" id="nav-crossprod" class="tab-inactive pb-1 flex items-center gap-2 transition-colors hover:text-emerald-400">
+                    <i data-lucide="layers" class="w-4 h-4"></i> Cross-Product
+                </button>
+                <button onclick="switchTab('tab-sarcasm')" id="nav-sarcasm" class="tab-inactive pb-1 flex items-center gap-2 transition-colors hover:text-emerald-400">
+                    <i data-lucide="alert-circle" class="w-4 h-4"></i> Sarcasm Queue
+                </button>
+                <button onclick="switchTab('tab-competitor')" id="nav-competitor" class="tab-inactive pb-1 flex items-center gap-2 transition-colors hover:text-emerald-400">
+                    <i data-lucide="swords" class="w-4 h-4"></i> Competitor Intel
+                </button>
+                <button onclick="switchTab('tab-agent')" id="nav-agent" class="pb-1 flex items-center gap-2 transition-colors hover:text-emerald-400">
+                    <i data-lucide="bot" class="w-4 h-4"></i> AI Agent
+                </button> 
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <div class="max-w-7xl mx-auto px-6 py-8">
+        
+        <!-- Controls Header -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center mb-8">
+            <div class="flex items-center gap-3 flex-1">
+                <button onclick="loadDemoData()" class="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2">
+                    <i data-lucide="database" class="w-4 h-4"></i> Load Demo Data
+                </button>
+                
+                <!-- UPLOAD DATA BUTTONS -->
+                <button onclick="document.getElementById('csvFileInput').click()" class="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload CSVs
+                </button>
+                <!-- Multiple attribute allows selecting >1 file -->
+                <input type="file" id="csvFileInput" accept=".csv" multiple class="hidden" onchange="handleCSVUpload(event)">
+                
+                <button onclick="openPasteModal()" class="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2">
+                    <i data-lucide="clipboard-paste" class="w-4 h-4"></i> Paste Text
+                </button>
+
+                <button onclick="openEcomModal()" class="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2">
+                    <i data-lucide="shopping-cart" class="w-4 h-4"></i> Import from Platform
+                </button>
+
+                <span id="data-status" class="ml-2 text-sm font-medium text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">Awaiting Data</span>
+            </div>
+            <div class="flex flex-col items-end gap-2">
+                <button onclick="runAnalysis()" id="btn-analyze" class="px-6 py-2 bg-brand-primary text-white font-bold rounded-lg hover:bg-emerald-600 transition-all shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i data-lucide="play" class="w-4 h-4"></i> Run Full Analysis
+                </button>
+                <!-- Progress bar — hidden until analysis starts -->
+                <div id="progress-wrap" class="hidden w-64 text-right">
+                    <p id="progress-label" class="text-xs text-slate-500 mb-1">Initialising…</p>
+                    <div class="w-full bg-slate-100 rounded-full h-2">
+                        <div id="progress-bar" class="bg-emerald-500 h-2 rounded-full transition-all duration-500" style="width:0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: OVERVIEW -->
+        <div id="tab-overview" class="tab-content block space-y-6">
+            
+            <!-- KPIs -->
+            <div class="grid grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex justify-between items-center text-slate-500 mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider">Total Reviews</span>
+                        <i data-lucide="database" class="w-4 h-4 text-emerald-500"></i>
+                    </div>
+                    <span id="kpi-total" class="text-3xl font-black text-slate-800">--</span>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex justify-between items-center text-slate-500 mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider">Positive Rate</span>
+                        <i data-lucide="thumbs-up" class="w-4 h-4 text-emerald-500"></i>
+                    </div>
+                    <span id="kpi-positive" class="text-3xl font-black text-emerald-600">--</span>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex justify-between items-center text-slate-500 mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider">Bots Removed</span>
+                        <i data-lucide="shield-alert" class="w-4 h-4 text-rose-500"></i>
+                    </div>
+                    <span id="kpi-bots" class="text-3xl font-black text-rose-600">--</span>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex justify-between items-center text-slate-500 mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider">Sarcasm Queue</span>
+                        <i data-lucide="alert-circle" class="w-4 h-4 text-amber-500"></i>
+                    </div>
+                    <span id="kpi-sarcasm" class="text-3xl font-black text-amber-600">--</span>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-3 gap-6">
+                <!-- Doughnut Chart -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm col-span-1">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-slate-500"></i> Overall Sentiment</h3>
+                    <div class="relative h-48 w-full flex justify-center items-center">
+                        <canvas id="sentimentChart"></canvas>
+                        <div id="chart-placeholder" class="absolute text-sm text-slate-400">Run analysis to view</div>
+                    </div>
+                </div>
+
+                <!-- Feature Breakdown -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm col-span-2">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="activity" class="w-4 h-4 text-slate-500"></i> Top Negative Features Breakdown</h3>
+                    <div id="feature-bars" class="space-y-4 overflow-y-auto max-h-48 pr-2">
+                        <p class="text-sm text-slate-400">Run analysis to generate feature extraction.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bot Clusters -->
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="bot" class="w-4 h-4 text-slate-500"></i> Bot Cluster Detection <span class="text-xs font-normal text-slate-400 ml-2">MinHash LSH • Jaccard ≥ 0.92</span></h3>
+                <div id="bot-clusters" class="space-y-3">
+                    <p class="text-sm text-slate-400">No clusters detected yet.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: TRENDS (Z-SCORE) -->
+        <div id="tab-trends" class="tab-content hidden space-y-6">
+            <div class="bg-brand-dark text-white p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-bold mb-1">Statistical Trend Detection</h2>
+                <p class="text-sm text-slate-400">Z-Score batch comparator — detects emerging complaints before they go viral</p>
+            </div>
+            
+            <div id="zscore-alerts" class="space-y-4">
+                <div class="p-4 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 flex items-center gap-3">
+                    <i data-lucide="check-circle" class="w-5 h-5"></i>
+                    Awaiting data or all features operating within normal standard deviations.
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="text-sm font-bold text-slate-800 mb-4 flex justify-between items-center">
+                    Negative Mention Rate — Top Feature Trending
+                    <span class="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded font-bold">Z-SCORE ENGINE</span>
+                </h3>
+                <div class="relative h-64 w-full">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Batch 1 vs Batch 2 Comparison -->
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                    <i data-lucide="git-compare" class="w-4 h-4 text-indigo-500"></i>
+                    Earlier Batch vs. Recent Batch — Complaint % by Feature
+                </h3>
+                <p class="text-xs text-slate-400 mb-5">Dataset split at median date. Only features with a ≥5pp shift are shown. This is the judges' manually verified output.</p>
+                <div id="batch-comparison-rows" class="space-y-4 mb-4">
+                    <p class="text-sm text-slate-400">Run analysis to populate batch comparison.</p>
+                </div>
+                <div class="relative h-64 w-full hidden" id="batchChartWrap">
+                    <canvas id="batchChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: CROSS-PRODUCT -->
+        <div id="tab-crossprod" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><i data-lucide="git-merge" class="w-5 h-5 text-indigo-500"></i> Platform-Level Defect Analysis</h3>
+                <p class="text-sm text-slate-500 mb-6">Identifies complaints that span across multiple unrelated product categories (e.g., Shipping issues affecting both Electronics and Food).</p>
+                <div id="crossprod-issues" class="space-y-4">
+                    <p class="text-sm text-slate-400">Run analysis to map cross-category defects.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: SARCASM QUEUE -->
+        <div id="tab-sarcasm" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-amber-500"></i> Human Verification Required</h3>
+                        <p class="text-sm text-slate-500">Reviews flagged with high sarcasm confidence that bypass standard NLP.</p>
+                    </div>
+                </div>
+                
+                <div id="sarcasm-queue" class="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                    <p class="text-sm text-slate-400">Run analysis to populate the queue.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: COMPETITOR INTEL -->
+        <div id="tab-competitor" class="tab-content hidden space-y-6">
+
+            <!-- Header Banner -->
+            <div class="bg-brand-dark text-white p-6 rounded-xl shadow-md flex items-start justify-between">
+                <div>
+                    <h2 class="text-xl font-bold mb-1 flex items-center gap-2">
+                        <i data-lucide="swords" class="w-5 h-5 text-emerald-400"></i>
+                        Competitor Intelligence
+                    </h2>
+                    <p class="text-sm text-slate-400">Upload competitor CSVs to unlock feature gap analysis, weakness radar, and shared platform defect detection.</p>
+                </div>
+                <span id="comp-status-badge" class="text-xs font-bold bg-slate-700 text-slate-300 px-3 py-1.5 rounded-full border border-slate-600 shrink-0">No Competitor Data</span>
+            </div>
+
+            <!-- Upload + Run Row -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-3">
+                <button onclick="document.getElementById('compCsvInput').click()" class="px-4 py-2 bg-indigo-50 text-indigo-700 font-semibold rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-200 flex items-center gap-2">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload Competitor CSVs
+                </button>
+                <input type="file" id="compCsvInput" accept=".csv" multiple class="hidden" onchange="handleCompetitorUpload(event)">
+
+                <button onclick="loadDemoCompetitorData()" class="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-2">
+                    <i data-lucide="database" class="w-4 h-4"></i> Load Demo Competitors
+                </button>
+
+                <div class="flex-1"></div>
+
+                <button onclick="runCompetitorAnalysis()" id="btn-comp-analyze" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <i data-lucide="play" class="w-4 h-4"></i> Run Competitor Analysis
+                </button>
+            </div>
+
+            <!-- Loaded files list -->
+            <div id="comp-files-list" class="hidden bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                <p class="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-2">Loaded Competitor Files</p>
+                <div id="comp-files-inner" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <!-- Summary KPIs -->
+            <div id="comp-kpis" class="hidden grid grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex justify-between items-center text-slate-500 mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider">Comp. Reviews</span>
+                        <i data-lucide="database" class="w-4 h-4 text-indigo-500"></i>
+                    </div>
+                    <span id="comp-kpi-total" class="text-3xl font-black text-slate-800">--</span>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex justify-between items-center text-slate-500 mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider">Risk Features</span>
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500"></i>
+                    </div>
+                    <span id="comp-kpi-risks" class="text-3xl font-black text-rose-600">--</span>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex justify-between items-center text-slate-500 mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider">Your Advantages</span>
+                        <i data-lucide="trophy" class="w-4 h-4 text-emerald-500"></i>
+                    </div>
+                    <span id="comp-kpi-advantages" class="text-3xl font-black text-emerald-600">--</span>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex justify-between items-center text-slate-500 mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider">Shared Issues</span>
+                        <i data-lucide="link-2" class="w-4 h-4 text-amber-500"></i>
+                    </div>
+                    <span id="comp-kpi-shared" class="text-3xl font-black text-amber-600">--</span>
+                </div>
+            </div>
+
+            <!-- Competitor selector tabs (shown when multiple competitors loaded) -->
+            <div id="comp-selector-wrap" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="flex border-b border-slate-100 bg-slate-50 px-4 pt-3 gap-1" id="comp-selector-tabs"></div>
+                <div id="comp-detail-panel" class="p-6 space-y-8"></div>
+            </div>
+
+            <!-- Empty state -->
+            <div id="comp-empty-state" class="bg-white rounded-xl border border-dashed border-slate-300 p-16 flex flex-col items-center justify-center text-center">
+                <div class="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
+                    <i data-lucide="swords" class="w-7 h-7 text-indigo-400"></i>
+                </div>
+                <h3 class="text-base font-bold text-slate-700 mb-1">No competitor analysis yet</h3>
+                <p class="text-sm text-slate-400 max-w-xs">Upload competitor CSV files (same schema as your reviews) and click <strong>Run Competitor Analysis</strong>.</p>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- E-Commerce Fetch Modal -->
+    <div id="ecom-modal" class="fixed inset-0 bg-slate-900/50 hidden flex items-center justify-center z-[100] backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="shopping-cart" class="w-5 h-5 text-emerald-500"></i>
+                    Import Reviews from Platform
+                </h3>
+                <button onclick="closeEcomModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <!-- Platform selector -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Platform</label>
+                    <div class="flex gap-2" id="ecom-platform-btns">
+                        <button onclick="selectPlatform('amazon')"   id="ecom-btn-amazon"   class="ecom-plat-btn flex-1 py-2 rounded-lg border-2 border-slate-200 text-sm font-semibold text-slate-600 hover:border-emerald-400 transition-colors">🛒 Amazon</button>
+                        <button onclick="selectPlatform('flipkart')" id="ecom-btn-flipkart" class="ecom-plat-btn flex-1 py-2 rounded-lg border-2 border-slate-200 text-sm font-semibold text-slate-600 hover:border-emerald-400 transition-colors">🏪 Flipkart</button>
+                        <button onclick="selectPlatform('meesho')"   id="ecom-btn-meesho"   class="ecom-plat-btn flex-1 py-2 rounded-lg border-2 border-slate-200 text-sm font-semibold text-slate-600 hover:border-emerald-400 transition-colors">🛍️ Meesho</button>
+                    </div>
+                </div>
+
+                <!-- Product ID -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Product ID
+                        <span id="ecom-pid-hint" class="ml-1 font-normal normal-case text-slate-400">(ASIN for Amazon, e.g. B09NZKQLTQ)</span>
+                    </label>
+                    <input id="ecom-product-id" type="text" placeholder="e.g. B09NZKQLTQ"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                </div>
+
+                <!-- API Key (hidden for Meesho) -->
+                <div id="ecom-apikey-wrap">
+                    <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        RapidAPI Key
+                        <a href="https://rapidapi.com" target="_blank" class="ml-1 font-normal normal-case text-emerald-600 hover:underline">Get a key ↗</a>
+                    </label>
+                    <input id="ecom-api-key" type="password" placeholder="Paste your RapidAPI key here"
+                        class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                    <p class="text-xs text-slate-400 mt-1">Key is sent only to your local backend — never stored by ReviewIQ.</p>
+                </div>
+
+                <!-- Amazon-specific extras -->
+                <div id="ecom-amazon-extras" class="hidden grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Country</label>
+                        <select id="ecom-country" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                            <option value="IN">India (IN)</option>
+                            <option value="US">USA (US)</option>
+                            <option value="UK">UK (UK)</option>
+                            <option value="AE">UAE (AE)</option>
+                            <option value="CA">Canada (CA)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Filter by Stars</label>
+                        <select id="ecom-star-filter" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                            <option value="">All Stars</option>
+                            <option value="1_star">1 Star</option>
+                            <option value="2_star">2 Stars</option>
+                            <option value="3_star">3 Stars</option>
+                            <option value="4_star">4 Stars</option>
+                            <option value="5_star">5 Stars</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Pages + Append -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Pages to Fetch</label>
+                        <input id="ecom-max-pages" type="number" min="1" max="20" value="3"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                        <p class="text-xs text-slate-400 mt-1">≈10 reviews/page · max 20</p>
+                    </div>
+                    <div class="flex flex-col justify-end pb-1">
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="ecom-append" class="w-4 h-4 accent-emerald-500" />
+                            <span class="text-sm font-medium text-slate-700">Merge with existing reviews</span>
+                        </label>
+                        <p class="text-xs text-slate-400 mt-1">Unchecked = replace all loaded reviews</p>
+                    </div>
+                </div>
+
+                <!-- Error/info banner -->
+                <div id="ecom-error" class="hidden text-sm bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3"></div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeEcomModal()" class="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors">Cancel</button>
+                <button onclick="submitEcomFetch()" id="ecom-submit-btn"
+                    class="px-5 py-2 bg-brand-primary text-white rounded-lg font-bold hover:bg-emerald-600 transition-colors flex items-center gap-2">
+                    <i data-lucide="download-cloud" class="w-4 h-4"></i> Fetch Reviews
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Paste Text Modal -->
+    <div id="paste-modal" class="fixed inset-0 bg-slate-900/50 hidden flex items-center justify-center z-[100] backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl">
+            <h3 class="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2"><i data-lucide="clipboard-paste" class="w-5 h-5 text-emerald-500"></i> Paste Raw Reviews</h3>
+            <p class="text-sm text-slate-500 mb-4">Paste unformatted review text here. Each line will be treated as a separate review.</p>
+            <textarea id="paste-input" class="w-full h-48 border border-slate-300 rounded-lg p-3 mb-4 focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none text-sm" placeholder="Great product, loved the battery life!&#10;Box arrived crushed, very disappointed..."></textarea>
+            <div class="flex justify-end gap-3">
+                <button onclick="closePasteModal()" class="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors">Cancel</button>
+                <button onclick="submitPastedData()" class="px-4 py-2 bg-brand-primary text-white rounded-lg font-bold hover:bg-emerald-600 transition-colors">Load Data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════ TAB: AI Agent ═══════════════════════ -->
+<div id="tab-agent" class="tab-content hidden space-y-6">
+
+    <!-- Header Banner -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div class="flex items-center gap-3 mb-1">
+            <div class="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center">
+                <i data-lucide="bot" class="w-5 h-5 text-white"></i>
+            </div>
+            <div>
+                <h2 class="text-lg font-bold text-slate-800">Autonomous AI Agent</h2>
+                <p class="text-xs text-slate-500">Powered by Gemini 2.0 Flash · sentiment, trends, churn, sarcasm &amp; competitor tools</p>
+            </div>
+        </div>
+        <p class="text-sm text-slate-600 mt-2">
+            Unlike the fixed pipeline, the agent <em>decides</em> which analyses to run, drills into anomalies,
+            reads real review samples, and writes an executive report — all autonomously.
+            You can also ask it ad-hoc questions in natural language below.
+        </p>
+    </div>
+
+    <!-- Row 1: Autonomous Agent -->
+    <div>
+
+        <!-- ── Autonomous Agent ───────────────────────────────────────────── -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-slate-700 flex items-center gap-2">
+                    <i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i>
+                    Autonomous Analysis
+                </h3>
+                <span id="agent-status-badge" class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Idle</span>
+            </div>
+            <p class="text-xs text-slate-500">
+                Calls sentiment, trend, churn, sarcasm, and competitor tools as needed.
+                Writes a structured executive report autonomously.
+            </p>
+            <button onclick="runAgentAnalyse()" id="btn-agent-run"
+                class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 text-sm">
+                <i data-lucide="play" class="w-4 h-4"></i> Run Autonomous Agent
+            </button>
+
+            <!-- Reasoning trace -->
+            <div id="agent-steps-container" class="hidden">
+                <p class="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1">
+                    <i data-lucide="list" class="w-3.5 h-3.5"></i> Agent Reasoning Trace
+                </p>
+                <div id="agent-steps" class="space-y-1.5 max-h-48 overflow-y-auto pr-1"></div>
+            </div>
+
+            <!-- Report output -->
+            <div id="agent-report-container" class="hidden">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Executive Report
+                    </p>
+                    <div class="flex items-center gap-3">
+                        <span id="agent-tokens-badge" class="text-xs text-slate-400"></span>
+                        <button onclick="downloadAgentPDF()" id="btn-agent-pdf"
+                            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i> Download PDF
+                        </button>
+                    </div>
+                </div>
+                <div id="agent-report-pdf-wrap">
+                    <div id="agent-report"
+                        class="text-sm text-slate-700 bg-slate-50 rounded-lg p-4 border border-slate-200 max-h-72 overflow-y-auto whitespace-pre-wrap font-mono leading-relaxed">
+                    </div>
+                </div>
+            </div>
+
+            <!-- RCA Results (populated when agent runs drill-downs) -->
+            <div id="agent-rca-container" class="hidden">
+                <p class="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1">
+                    <i data-lucide="search" class="w-3.5 h-3.5 text-amber-500"></i>
+                    Root Cause Findings
+                    <span class="text-slate-400 font-normal ml-1">— from agent drill-downs</span>
+                </p>
+                <div id="agent-rca-list" class="space-y-3 max-h-80 overflow-y-auto pr-1"></div>
+            </div>
+
+            <div id="agent-error" class="hidden text-xs text-red-600 bg-red-50 rounded-lg p-3 border border-red-200"></div>
+        </div>
+
+        </div>
+    </div>
+
+    <!-- Row 2: Ask the Agent Q&A Chat -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+        <h3 class="font-semibold text-slate-700 flex items-center gap-2 mb-3">
+            <i data-lucide="message-circle" class="w-4 h-4 text-blue-500"></i>
+            Ask the Agent — Natural Language Q&amp;A
+        </h3>
+        <p class="text-xs text-slate-500 mb-4">
+            Ask any question about your reviews. The agent investigates with its tools and answers with evidence.
+            Example: <em>"Why is battery sentiment getting worse this month?"</em>
+        </p>
+
+        <div id="agent-chat-history" class="space-y-3 max-h-72 overflow-y-auto mb-4 pr-1"></div>
+
+        <div class="flex gap-2">
+            <input id="agent-question-input" type="text"
+                placeholder="e.g. Which product has the highest churn risk and why?"
+                class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                onkeydown="if(event.key==='Enter') askAgent()" />
+            <button onclick="askAgent()" id="btn-agent-ask"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors text-sm flex items-center gap-1.5">
+                <i data-lucide="send" class="w-4 h-4"></i> Ask
+            </button>
+        </div>
+    </div>
+<!-- /tab-agent -->
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 flex flex-col gap-2 z-50"></div>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Global State
+        let LIVE = null;
+        const API_URL = 'http://127.0.0.1:8000'; // Make sure this matches your backend
+
+        // --- UI UTILITIES ---
+        function showToast(msg, type='info') {
+            const colors = {
+                'ok': 'bg-emerald-500',
+                'err': 'bg-rose-500',
+                'info': 'bg-slate-800'
+            };
+            const div = document.createElement('div');
+            div.className = `${colors[type]} text-white px-4 py-3 rounded shadow-lg text-sm font-medium toast-enter flex items-center gap-2`;
+            div.innerHTML = `<i data-lucide="${type==='ok'?'check-circle':type==='err'?'alert-triangle':'info'}" class="w-4 h-4"></i> ${msg}`;
+            document.getElementById('toast-container').appendChild(div);
+            lucide.createIcons();
+            setTimeout(() => {
+                div.style.opacity = '0';
+                div.style.transform = 'translateY(10px)';
+                div.style.transition = 'all 0.3s ease';
+                setTimeout(() => div.remove(), 300);
+            }, 3000);
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            
+            document.querySelectorAll('[id^="nav-"]').forEach(el => {
+                el.classList.remove('tab-active', 'text-white');
+                el.classList.add('tab-inactive');
+            });
+            // Extract nav id: tab-overview → nav-overview, tab-crossprod → nav-crossprod, etc.
+            const navId = 'nav-' + tabId.replace('tab-', '');
+            const activeNav = document.getElementById(navId);
+            if (activeNav) {
+                activeNav.classList.remove('tab-inactive');
+                activeNav.classList.add('tab-active', 'text-white');
+            }
+        }
+
+        function updateDataStatus(count) {
+            showToast(`Loaded ${count} reviews`, 'ok');
+            document.getElementById('data-status').textContent = `${count} Reviews Loaded`;
+            document.getElementById('data-status').className = 'ml-2 text-sm font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200';
+        }
+
+        // --- INGESTION API ---
+        async function loadDemoData() {
+            try {
+                const res = await fetch(`${API_URL}/api/ingest/demo`);
+                const data = await res.json();
+                if (res.ok) {
+                    updateDataStatus(data.total_loaded);
+                } else {
+                    showToast('Failed to load data: ' + data.error, 'err');
+                }
+            } catch (e) {
+                showToast('API Connection Error', 'err');
+            }
+        }
+
+        async function handleCSVUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+            
+            showToast(`Combining and uploading ${files.length} CSV file(s)...`, 'info');
+            
+            try {
+                let combinedText = "";
+                let isFirstFile = true;
+
+                // Read and combine all selected CSV files
+                for (let i = 0; i < files.length; i++) {
+                    const text = await files[i].text();
+                    if (!text.trim()) continue;
+
+                    if (isFirstFile) {
+                        // Keep headers for the first file
+                        combinedText += text.trim() + "\n";
+                        isFirstFile = false;
+                    } else {
+                        // Strip headers from subsequent files
+                        const lines = text.trim().split('\n');
+                        if (lines.length > 1) {
+                            combinedText += lines.slice(1).join('\n') + "\n";
+                        }
+                    }
+                }
+
+                const blob = new Blob([combinedText], { type: 'text/csv' });
+                const formData = new FormData();
+                formData.append('file', blob, 'combined_uploads.csv');
+                
+                const res = await fetch(`${API_URL}/api/ingest/csv`, { method: 'POST', body: formData });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    updateDataStatus(data.total_loaded);
+                } else {
+                    showToast(data.error || 'Upload failed', 'err');
+                }
+            } catch(e) { 
+                showToast('Upload Error: ' + e.message, 'err'); 
+            }
+            
+            event.target.value = ''; // Reset input
+        }
+
+        function openPasteModal() { document.getElementById('paste-modal').classList.remove('hidden'); }
+        function closePasteModal() { document.getElementById('paste-modal').classList.add('hidden'); }
+
+        async function submitPastedData() {
+            const text = document.getElementById('paste-input').value;
+            if (!text.trim()) { showToast('Please enter some text', 'err'); return; }
+            
+            try {
+                const res = await fetch(`${API_URL}/api/ingest/paste`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({text: text})
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    updateDataStatus(data.total_loaded);
+                    closePasteModal();
+                    document.getElementById('paste-input').value = '';
+                } else {
+                    showToast(data.error || 'Upload failed', 'err');
+                }
+            } catch(e) { 
+                showToast('API Connection Error', 'err'); 
+            }
+        }
+
+        // --- ANALYSIS API ---
+        let _pollInterval = null;
+
+        function _setAnalysisRunning(running) {
+            const btn  = document.getElementById('btn-analyze');
+            const wrap = document.getElementById('progress-wrap');
+            btn.disabled = running;
+            btn.innerHTML = running
+                ? '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Analysing…'
+                : '<i data-lucide="play" class="w-4 h-4"></i> Run Full Analysis';
+            wrap.classList.toggle('hidden', !running);
+            lucide.createIcons();
+        }
+
+        function _updateProgress(pct, label) {
+            document.getElementById('progress-bar').style.width   = pct + '%';
+            document.getElementById('progress-label').textContent = label;
+        }
+
+        async function runAnalysis() {
+            if (_pollInterval) clearInterval(_pollInterval);
+            _setAnalysisRunning(true);
+            _updateProgress(2, 'Starting pipeline…');
+
+            try {
+                // 1. Kick off background pipeline
+                const startRes = await fetch(`${API_URL}/api/analyze`, { method: 'POST' });
+                const startData = await startRes.json();
+                if (!startRes.ok) {
+                    showToast(startData.error || 'Failed to start analysis', 'err');
+                    _setAnalysisRunning(false);
+                    return;
+                }
+
+                const totalReviews = startData.total || 1;
+
+                // 2. Poll for progress until done
+                _pollInterval = setInterval(async () => {
+                    try {
+                        const statusRes  = await fetch(`${API_URL}/api/analyze/status`);
+                        const status = await statusRes.json();
+
+                        // Update progress bar
+                        const pct   = Math.min(95, Math.round((status.progress / totalReviews) * 100));
+                        const stage = status.stage || 'Processing…';
+                        _updateProgress(pct, `${stage} (${status.progress}/${totalReviews})`);
+
+                        if (!status.running) {
+                            clearInterval(_pollInterval);
+                            _pollInterval = null;
+                            _updateProgress(100, 'Complete');
+                            _setAnalysisRunning(false);
+
+                            if (status.result) {
+                                showToast('Analysis complete!', 'ok');
+                                LIVE = status.result;
+                                updateUI(status.result);
+                            } else if (status.error) {
+                                showToast('Analysis error: ' + status.error, 'err');
+                            }
+                        }
+                    } catch (pollErr) {
+                        // Don't abort on a single poll failure — just wait for next tick
+                        console.warn('Poll error:', pollErr);
+                    }
+                }, 1500);
+
+            } catch (e) {
+                showToast('API Connection Error: ' + e.message, 'err');
+                _setAnalysisRunning(false);
+            }
+        }
+
+        // --- SARCASM ACTIONS ---
+        async function labelSarcasm(reviewId, label) {
+            try {
+                const res = await fetch(`${API_URL}/api/sarcasm/label`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({review_id: reviewId, label: label})
+                });
+                if (res.ok) {
+                    showToast(`Review verified as ${label}`, 'ok');
+                    const card = document.getElementById(`sarcasm-card-${reviewId}`);
+                    if (card) {
+                        card.style.transition = "opacity 0.3s ease";
+                        card.style.opacity = 0;
+                        setTimeout(() => card.remove(), 300);
+                    }
+                } else {
+                    showToast('Failed to update label.', 'err');
+                }
+            } catch (e) {
+                showToast('Failed to update label.', 'err');
+            }
+        }
+
+        // --- PDF EXPORT (Agent Report) ---
+        function downloadAgentPDF() {
+            const reportEl = document.getElementById('agent-report');
+            if (!reportEl || !reportEl.innerHTML.trim()) {
+                showToast('Run the agent first to generate a report.', 'err');
+                return;
+            }
+
+            const tokensText = document.getElementById('agent-tokens-badge')?.textContent || '';
+
+            // Clone the report element so we can strip all overflow/height constraints
+            // that cause html2pdf to only capture the visible portion.
+            const clone = reportEl.cloneNode(true);
+            clone.style.cssText = [
+                'max-height: none !important',
+                'height: auto !important',
+                'overflow: visible !important',
+                'font-size: 13px',
+                'line-height: 1.75',
+                'white-space: pre-wrap',
+                'font-family: ui-monospace, monospace',
+                'color: #1e293b',
+                'background: #fff',
+                'padding: 0',
+                'border: none',
+            ].join(';');
+
+            // Temporarily attach to DOM off-screen so html2canvas can measure full height
+            clone.style.position = 'fixed';
+            clone.style.top = '-99999px';
+            clone.style.left = '0';
+            clone.style.width = '750px'; // letter width at 96dpi ≈ 816px; leave room for margins
+            document.body.appendChild(clone);
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'font-family: Georgia, serif; padding: 40px; color: #1e293b; background: #fff; width: 750px;';
+            wrapper.innerHTML = `
+                <div style="border-bottom: 2px solid #059669; padding-bottom: 14px; margin-bottom: 22px;">
+                    <h1 style="font-size: 20px; font-weight: 900; margin: 0 0 4px; color: #0f172a; letter-spacing: -0.5px;">ReviewIQ — AI Agent Executive Report</h1>
+                    <p style="font-size: 11px; color: #64748b; margin: 0;">Generated by Autonomous Agent &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-US', {dateStyle: 'long'})}${tokensText ? ' &nbsp;·&nbsp; ' + tokensText : ''}</p>
+                </div>`;
+            wrapper.appendChild(clone);
+
+            wrapper.style.position = 'fixed';
+            wrapper.style.top = '-99999px';
+            wrapper.style.left = '0';
+            document.body.appendChild(wrapper);
+
+            const opt = {
+                margin:      [0.55, 0.6, 0.55, 0.6],
+                filename:    `ReviewIQ_Agent_Report_${new Date().toISOString().slice(0,10)}.pdf`,
+                image:       { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 900 },
+                jsPDF:       { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            showToast('Preparing PDF — please wait…', 'info');
+            html2pdf().set(opt).from(wrapper).save().then(() => {
+                document.body.removeChild(wrapper);
+                showToast('PDF downloaded successfully.', 'ok');
+            }).catch(err => {
+                document.body.removeChild(wrapper);
+                showToast('PDF export failed: ' + err.message, 'err');
+            });
+        }
+
+
+
+        // --- CORE UI RENDERER (CRASH PROOF) ---
+        function updateUI(data) {
+            try {
+                // KPIs
+                document.getElementById('kpi-total').textContent = data.stats?.total || 0;
+                document.getElementById('kpi-positive').textContent = (data.stats?.positivePct || 0) + '%';
+                document.getElementById('kpi-bots').textContent = data.stats?.bots_removed || 0;
+                document.getElementById('kpi-sarcasm').textContent = data.stats?.sarcasm_queued || 0;
+
+                // Doughnut Chart
+                document.getElementById('chart-placeholder').style.display = 'none';
+                const ctxSent = document.getElementById('sentimentChart');
+                if (window.sentimentChartInstance) window.sentimentChartInstance.destroy();
+                window.sentimentChartInstance = new Chart(ctxSent, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Positive', 'Neutral', 'Negative'],
+                        datasets: [{
+                            data: [data.stats?.positivePct || 0, data.stats?.neutralPct || 0, data.stats?.negativePct || 0],
+                            backgroundColor: ['#10b981', '#fbbf24', '#f43f5e'],
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: { 
+                        cutout: '75%', 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } }
+                    }
+                });
+
+                // Features Bar
+                const fContainer = document.getElementById('feature-bars');
+                fContainer.innerHTML = '';
+                const featuresList = data.features || [];
+                if (featuresList.length === 0) {
+                    fContainer.innerHTML = '<p class="text-sm text-slate-500">No features extracted.</p>';
+                } else {
+                    featuresList.forEach(f => {
+                        const confBadge = f.confidence != null
+                            ? `<span class="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono ml-1" title="Avg extraction confidence">${f.confidence}%</span>`
+                            : '';
+                        fContainer.innerHTML += `
+                            <div class="mb-3">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="font-bold text-slate-700">${f.name}${confBadge}</span>
+                                    <span class="text-slate-500">${f.pos}% pos • ${f.neg}% neg</span>
+                                </div>
+                                <div class="w-full bg-slate-100 rounded-full h-2.5 flex overflow-hidden">
+                                    <div class="bg-emerald-400 h-2.5" style="width: ${f.pos}%"></div>
+                                    <div class="bg-amber-400 h-2.5" style="width: ${f.mix}%"></div>
+                                    <div class="bg-rose-400 h-2.5" style="width: ${f.neg}%"></div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                // Bots
+                const bContainer = document.getElementById('bot-clusters');
+                bContainer.innerHTML = '';
+                if (!data.bot_clusters || data.bot_clusters.length === 0) {
+                    bContainer.innerHTML = '<p class="text-sm text-slate-500">No clusters detected.</p>';
+                } else {
+                    data.bot_clusters.forEach(c => {
+                        bContainer.innerHTML += `
+                            <div class="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-sm rounded-lg mb-2">
+                                <strong>Cluster ${c.id}:</strong> ${c.size} near-identical reviews — <span class="uppercase text-xs font-black tracking-wider">Quarantined</span>
+                            </div>
+                        `;
+                    });
+                }
+
+                // Z-Score Alerts
+                const zContainer = document.getElementById('zscore-alerts');
+                zContainer.innerHTML = '';
+                if (!data.systemic_alerts || data.systemic_alerts.length === 0) {
+                    zContainer.innerHTML = '<div class="p-4 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 flex items-center gap-3"><i data-lucide="check-circle" class="w-5 h-5"></i> All features operating within normal standard deviations. No anomalies detected.</div>';
+                } else {
+                    data.systemic_alerts.forEach(alert => {
+                        const zDisplay = (typeof alert.z_score === 'number')
+                            ? alert.z_score.toFixed(2)
+                            : alert.z_score; // handles "N/A" or "∞"
+                        const meanDisplay = (typeof alert.mean === 'number')
+                            ? alert.mean.toFixed(1)
+                            : '—';
+                        zContainer.innerHTML += `
+                            <div class="flex items-center justify-between p-5 bg-rose-50 border-l-4 border-rose-500 rounded-r-lg shadow-sm mb-3">
+                                <div>
+                                    <h4 class="text-rose-900 font-bold text-lg flex items-center gap-2">
+                                        <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                                        ${alert.status === 'Emerging' ? 'Emerging Issue' : 'Spike Detected'}: ${alert.feature}
+                                    </h4>
+                                    <p class="text-sm text-rose-700 mt-1">Current Complaints: <strong>${alert.current_count}</strong> (Historical Mean: ${meanDisplay})</p>
+                                    ${alert.status === 'Emerging' ? '<span class="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded">EMERGING — insufficient history for z-score</span>' : ''}
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-3xl font-black text-rose-600">${zDisplay}</div>
+                                    <div class="text-xs text-rose-500 font-bold uppercase tracking-wider">Z-Score</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                // Trend Chart
+                const ctxTrend = document.getElementById('trendChart');
+                if (window.trendChartInstance) window.trendChartInstance.destroy();
+                const trendData = data.trend_chart || [];
+                window.trendChartInstance = new Chart(ctxTrend, {
+                    type: 'line',
+                    data: {
+                        labels: trendData.map(d => d.batch),
+                        datasets: [{
+                            label: data.trend_label || 'Negative Mentions',
+                            data: trendData.map(d => d.negRate),
+                            borderColor: '#f43f5e',
+                            backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+
+                // Cross-Product Issues
+                const cpContainer = document.getElementById('crossprod-issues');
+                cpContainer.innerHTML = '';
+                if (!data.platform_issues || data.platform_issues.length === 0) {
+                    cpContainer.innerHTML = '<p class="text-sm text-slate-500">No cross-category issues detected.</p>';
+                } else {
+                    data.platform_issues.forEach(i => {
+                        cpContainer.innerHTML += `
+                            <div class="p-4 bg-indigo-50 border border-indigo-100 rounded-lg mb-3">
+                                <h4 class="text-indigo-900 font-bold mb-1">${i.feature}</h4>
+                                <p class="text-sm text-indigo-700">Impacts: ${i.impacted_categories.join(', ')}</p>
+                            </div>
+                        `;
+                    });
+                }
+
+                // Sarcasm Queue
+                const sqContainer = document.getElementById('sarcasm-queue');
+                sqContainer.innerHTML = '';
+                if (!data.sarcasm_queue || data.sarcasm_queue.length === 0) {
+                    sqContainer.innerHTML = '<p class="text-sm text-slate-500">No pending reviews requiring human verification.</p>';
+                } else {
+                    data.sarcasm_queue.forEach(r => {
+                        const langLabel = r.language && r.language !== 'en'
+                            ? `<span class="text-xs font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded uppercase ml-1">${r.language}</span>`
+                            : '';
+                        sqContainer.innerHTML += `
+                            <div id="sarcasm-card-${r.id}" class="p-4 bg-amber-50 border border-amber-200 rounded-lg mb-3 shadow-sm transition-opacity">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="text-xs font-mono text-amber-700 bg-amber-100 px-2 py-1 rounded border border-amber-300">ID: ${r.id}${langLabel}</span>
+                                    <span class="text-xs font-bold text-amber-600 bg-white px-2 py-1 rounded border border-amber-100 shadow-sm">Confidence: ${(r.confidence * 100).toFixed(0)}%</span>
+                                </div>
+                                <p class="text-sm text-slate-800 italic mb-4 leading-relaxed">"${r.text}"</p>
+                                <div class="flex gap-2 border-t border-amber-100 pt-3">
+                                    <button onclick="labelSarcasm('${r.id}', 'negative')" class="flex-1 py-1.5 bg-rose-100 text-rose-700 rounded text-xs font-bold hover:bg-rose-200 transition-colors">Flag Negative</button>
+                                    <button onclick="labelSarcasm('${r.id}', 'positive')" class="flex-1 py-1.5 bg-emerald-100 text-emerald-700 rounded text-xs font-bold hover:bg-emerald-200 transition-colors">Flag Positive</button>
+                                    <button onclick="labelSarcasm('${r.id}', 'neutral')" class="flex-1 py-1.5 bg-slate-200 text-slate-700 rounded text-xs font-bold hover:bg-slate-300 transition-colors">Flag Neutral</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                // Batch Comparison widget
+                const bcRows = document.getElementById('batch-comparison-rows');
+                const bcChartWrap = document.getElementById('batchChartWrap');
+                const batchData = data.batch_comparison || [];
+                if (batchData.length === 0) {
+                    bcRows.innerHTML = '<p class="text-sm text-slate-400">No significant batch-over-batch shifts detected (need ≥5pp delta).</p>';
+                } else {
+                    bcRows.innerHTML = '';
+                    batchData.forEach(bc => {
+                        const arrowColor = bc.delta > 0 ? 'text-rose-600' : 'text-emerald-600';
+                        const arrow      = bc.delta > 0 ? '↑' : '↓';
+                        const badgeColor = bc.delta >= 15 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700';
+                        bcRows.innerHTML += `
+                            <div class="flex items-center gap-3">
+                                <span class="w-28 text-xs font-bold text-slate-700 shrink-0">${bc.feature}</span>
+                                <div class="flex-1 relative h-6 bg-slate-100 rounded overflow-hidden flex">
+                                    <div class="h-full bg-slate-300 flex items-center justify-end pr-1" style="width:${bc.b1_pct}%" title="${bc.b1_label}: ${bc.b1_pct}%">
+                                        <span class="text-xs text-slate-600 font-mono">${bc.b1_pct}%</span>
+                                    </div>
+                                    <div class="h-full bg-rose-400 flex items-center justify-end pr-1" style="width:${Math.max(bc.b2_pct - bc.b1_pct, 0)}%" title="${bc.b2_label}: ${bc.b2_pct}%"></div>
+                                </div>
+                                <span class="text-xs font-mono w-12 text-right ${arrowColor} font-bold">${arrow}${Math.abs(bc.delta)}pp</span>
+                                <span class="text-xs px-2 py-0.5 rounded font-bold ${badgeColor} shrink-0">${bc.b2_pct}%</span>
+                            </div>`;
+                    });
+
+                    // Grouped bar chart
+                    bcChartWrap.classList.remove('hidden');
+                    if (window.batchChartInstance) window.batchChartInstance.destroy();
+                    window.batchChartInstance = new Chart(document.getElementById('batchChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: batchData.map(d => d.feature),
+                            datasets: [
+                                { label: batchData[0]?.b1_label || 'Earlier Batch',
+                                  data: batchData.map(d => d.b1_pct),
+                                  backgroundColor: '#94a3b8', borderRadius: 4 },
+                                { label: batchData[0]?.b2_label || 'Recent Batch',
+                                  data: batchData.map(d => d.b2_pct),
+                                  backgroundColor: '#f43f5e', borderRadius: 4 },
+                            ]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { position: 'top' },
+                                       tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw}% negative` } } },
+                            scales: { y: { beginAtZero: true, max: 100,
+                                          title: { display: true, text: 'Negative mention %' } } }
+                        }
+                    });
+                }
+                }
+
+                lucide.createIcons();
+                
+            } catch (err) {
+                console.error("UI Update Error:", err);
+                showToast("Render error. Some features may be blank.", "err");
+            }
+        }
+        // ── COMPETITOR INTELLIGENCE ────────────────────────────────────────────
+
+        // In-memory competitor data store: { filename: csvText }
+        let COMP_FILES = {};
+        let COMP_RESULT = null;
+        let ACTIVE_COMP = null;
+
+        // Chart instances for competitor tab
+        let compGapChartInstance = null;
+        let compWeaknessChartInstance = null;
+
+        // ── Upload handler ──────────────────────────────────────────────────
+        async function handleCompetitorUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            for (let f of files) {
+                const text = await f.text();
+                COMP_FILES[f.name] = text;
+            }
+
+            _renderCompFilesList();
+            showToast(`${files.length} competitor file(s) loaded`, 'ok');
+            document.getElementById('comp-status-badge').textContent = `${Object.keys(COMP_FILES).length} File(s) Ready`;
+            document.getElementById('comp-status-badge').className = 'text-xs font-bold bg-indigo-600 text-white px-3 py-1.5 rounded-full border border-indigo-500 shrink-0';
+            event.target.value = '';
+        }
+
+        // ── Demo competitor loader ──────────────────────────────────────────
+        async function loadDemoCompetitorData() {
+            try {
+                const res = await fetch(`${API_URL}/api/competitor/demo`);
+                const data = await res.json();
+                if (res.ok) {
+                    showToast(`Demo competitor data loaded: ${data.total_loaded} reviews`, 'ok');
+                    document.getElementById('comp-status-badge').textContent = `${data.total_loaded} Demo Reviews Ready`;
+                    document.getElementById('comp-status-badge').className = 'text-xs font-bold bg-indigo-600 text-white px-3 py-1.5 rounded-full border border-indigo-500 shrink-0';
+                    // Mark demo mode
+                    COMP_FILES['__demo__'] = '__demo__';
+                    _renderCompFilesList();
+                } else {
+                    showToast('Failed to load demo: ' + (data.error || 'Unknown error'), 'err');
+                }
+            } catch(e) {
+                showToast('API error loading demo competitors', 'err');
+            }
+        }
+
+        function _renderCompFilesList() {
+            const wrap  = document.getElementById('comp-files-list');
+            const inner = document.getElementById('comp-files-inner');
+            const names = Object.keys(COMP_FILES);
+            if (names.length === 0) { wrap.classList.add('hidden'); return; }
+            wrap.classList.remove('hidden');
+            inner.innerHTML = names.map(n =>
+                `<span class="text-xs bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full font-medium border border-indigo-200 flex items-center gap-1">
+                    <i data-lucide="file-spreadsheet" class="w-3 h-3"></i>${n}
+                </span>`
+            ).join('');
+            lucide.createIcons();
+        }
+        
+        // ── 1. Autonomous Agent ─────────────────────────────────────
+async function runAgentAnalyse() {
+    disableBtn('btn-agent-run', 'Running agent…');
+    setAgentBadge('agent-status-badge', 'Running…', 'bg-blue-100 text-blue-600');
+    document.getElementById('agent-steps-container').classList.remove('hidden');
+    document.getElementById('agent-report-container').classList.add('hidden');
+    document.getElementById('agent-rca-container').classList.add('hidden');
+    document.getElementById('agent-rca-list').innerHTML = '';
+    document.getElementById('agent-error').classList.add('hidden');
+    document.getElementById('agent-steps').innerHTML = '';
+
+    try {
+        const res  = await fetch(`${API_URL}/api/agent/analyse`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Agent failed');
+
+        const stepsEl = document.getElementById('agent-steps');
+        (data.steps || []).forEach((s, i) => {
+            stepsEl.innerHTML += `
+            <div class="flex items-start gap-2 text-xs bg-slate-50 rounded-lg p-2 border border-slate-200">
+                <span class="shrink-0 w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-[10px]">${i+1}</span>
+                <div>
+                    <span class="font-mono font-semibold text-emerald-700">${s.tool}</span>
+                    ${Object.keys(s.input||{}).length ? `<span class="text-slate-400"> (${JSON.stringify(s.input).slice(0,60)})</span>` : ''}
+                    <p class="text-slate-500 mt-0.5">${(s.output_preview||'').slice(0,120)}</p>
+                </div>
+            </div>`;
+        });
+
+        document.getElementById('agent-report-container').classList.remove('hidden');
+        document.getElementById('agent-report').innerHTML = renderMd(data.report);
+        if (data.tokens_used) document.getElementById('agent-tokens-badge').textContent = `${data.tokens_used.toLocaleString()} tokens`;
+
+        // Render RCA results extracted from agent tool steps
+        const rcaSteps = (data.steps || []).filter(s => s.tool === 'root_cause_drill_down' && s.output_preview);
+        if (rcaSteps.length > 0) {
+            const rcaList = document.getElementById('agent-rca-list');
+            rcaList.innerHTML = rcaSteps.map(s => {
+                let parsed = {};
+                try { parsed = JSON.parse(s.output_preview || '{}'); } catch(e) {}
+                const report = parsed.rca_report || s.output_preview || '';
+                const isFallback = parsed.status === 'fallback';
+                return `
+                <div class="rounded-lg border ${isFallback ? 'border-amber-300 bg-amber-50' : 'border-emerald-200 bg-emerald-50'} p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-semibold text-sm text-slate-800 flex items-center gap-1.5">
+                            <i data-lucide="search" class="w-3.5 h-3.5 text-amber-500"></i>
+                            ${parsed.feature || s.input?.feature_alert_json?.match(/"feature"\s*:\s*"([^"]+)"/)?.[1] || 'Feature Alert' }
+                        </span>
+                        <span class="text-xs px-2 py-0.5 rounded-full ${isFallback ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">
+                            ${isFallback ? 'Fallback' : 'AI Analysis'}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-700 bg-white rounded p-3 border border-slate-200 max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">${report.slice(0, 800)}</div>
+                    ${parsed.tokens_used ? `<p class="text-xs text-slate-400 mt-1">${parsed.tokens_used.toLocaleString()} tokens</p>` : ''}
+                </div>`;
+            }).join('');
+            document.getElementById('agent-rca-container').classList.remove('hidden');
+            lucide.createIcons();
+        }
+        setAgentBadge('agent-status-badge',
+            data.fallback ? 'Fallback' : 'Complete',
+            data.fallback ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-700');
+
+    } catch (err) {
+        const e = document.getElementById('agent-error');
+        e.classList.remove('hidden');
+        e.textContent = err.message;
+        setAgentBadge('agent-status-badge', 'Error', 'bg-red-100 text-red-600');
+    }
+    enableBtn('btn-agent-run', 'play', 'Run Autonomous Agent');
+}
+
+
+// ── 2. Ask Agent Q&A ────────────────────────────────────────
+async function askAgent() {
+    const input = document.getElementById('agent-question-input');
+    const question = input.value.trim();
+    if (!question) return;
+
+    const historyEl = document.getElementById('agent-chat-history');
+    historyEl.innerHTML += `
+        <div class="flex justify-end">
+            <div class="bg-blue-600 text-white text-sm rounded-xl rounded-br-sm px-3 py-2 max-w-sm">${question}</div>
+        </div>`;
+    input.value = '';
+
+    const thinkId = `think-${Date.now()}`;
+    historyEl.innerHTML += `
+        <div id="${thinkId}" class="flex items-center gap-2 text-xs text-slate-400 italic">
+            <svg class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 0 1 10 10"/>
+            </svg>
+            Agent is thinking…
+        </div>`;
+    historyEl.scrollTop = historyEl.scrollHeight;
+    disableBtn('btn-agent-ask', 'Thinking…');
+
+    try {
+        const res  = await fetch(`${API_URL}/api/agent/ask`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+        document.getElementById(thinkId)?.remove();
+        if (!res.ok) throw new Error(data.error || 'Ask agent failed');
+
+        const steps = (data.steps || []).length;
+        historyEl.innerHTML += `
+            <div class="flex justify-start">
+                <div class="bg-white border border-slate-200 shadow-sm text-sm rounded-xl rounded-bl-sm px-4 py-3 max-w-lg">
+                    <div class="text-slate-700 mb-2">${renderMd(data.report || data.reply || '')}</div>
+                    <div class="flex items-center gap-3 mt-2 pt-2 border-t border-slate-100">
+                        <span class="text-[10px] text-slate-400">${steps} tool call${steps!==1?'s':''}</span>
+                        ${data.tokens_used ? `<span class="text-[10px] text-slate-400">${data.tokens_used.toLocaleString()} tokens</span>` : ''}
+                        ${data.fallback ? '<span class="text-[10px] text-amber-500">fallback mode</span>' : ''}
+                    </div>
+                </div>
+            </div>`;
+
+    } catch (err) {
+        document.getElementById(thinkId)?.remove();
+        historyEl.innerHTML += `
+            <div class="flex justify-start">
+                <div class="bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl px-3 py-2 max-w-sm">Error: ${err.message}</div>
+            </div>`;
+    }
+
+    enableBtn('btn-agent-ask', 'send', 'Ask');
+    historyEl.scrollTop = historyEl.scrollHeight;
+}
+
+        // ── Run analysis ────────────────────────────────────────────────────
+        async function runCompetitorAnalysis() {
+            if (Object.keys(COMP_FILES).length === 0) {
+                showToast('Upload competitor CSV files first', 'err'); return;
+            }
+            if (!LIVE) {
+                showToast('Run your main analysis first (needed for comparison baseline)', 'err'); return;
+            }
+
+            const btn = document.getElementById('btn-comp-analyze');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Analysing…';
+            lucide.createIcons();
+
+            try {
+                let result;
+
+                if (COMP_FILES['__demo__']) {
+                    // Call demo endpoint
+                    const res = await fetch(`${API_URL}/api/competitor/analyze`, { method: 'POST',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({ demo: true })
+                    });
+                    result = await res.json();
+                    if (!res.ok) throw new Error(result.error || 'Analysis failed');
+                } else {
+                    // Upload CSVs as form-data and analyze
+                    let combined = '';
+                    let first = true;
+                    for (const [fname, text] of Object.entries(COMP_FILES)) {
+                        if (fname === '__demo__') continue;
+                        if (first) { combined += text.trim() + '\n'; first = false; }
+                        else {
+                            const lines = text.trim().split('\n');
+                            if (lines.length > 1) combined += lines.slice(1).join('\n') + '\n';
+                        }
+                    }
+                    const blob = new Blob([combined], { type: 'text/csv' });
+                    const fd   = new FormData();
+                    fd.append('file', blob, 'competitor_combined.csv');
+
+                    // File uploads must go to /upload (multipart); /analyze only accepts JSON
+                    const res = await fetch(`${API_URL}/api/competitor/upload`, { method: 'POST', body: fd });
+                    result = await res.json();
+                    if (!res.ok) throw new Error(result.error || 'Analysis failed');
+                }
+
+                COMP_RESULT = result;
+                _renderCompetitorUI(result);
+                showToast('Competitor analysis complete!', 'ok');
+
+            } catch(e) {
+                showToast('Competitor analysis error: ' + e.message, 'err');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="play" class="w-4 h-4"></i> Run Competitor Analysis';
+                lucide.createIcons();
+            }
+        }
+
+        // ── Main renderer ───────────────────────────────────────────────────
+        function _renderCompetitorUI(data) {
+            const competitors = data.competitors || [];
+            const summary     = data.summary    || {};
+
+            if (competitors.length === 0) {
+                showToast('No competitor data found in result', 'err'); return;
+            }
+
+            // Hide empty state
+            document.getElementById('comp-empty-state').classList.add('hidden');
+
+            // KPIs
+            document.getElementById('comp-kpis').classList.remove('hidden');
+            document.getElementById('comp-kpi-total').textContent     = summary.total_competitor_reviews ?? '--';
+            document.getElementById('comp-kpi-risks').textContent     = summary.risk_count      ?? 0;
+            document.getElementById('comp-kpi-advantages').textContent = summary.advantage_count ?? 0;
+            document.getElementById('comp-kpi-shared').textContent    = summary.shared_issue_count ?? 0;
+
+            // Competitor selector tabs
+            const selectorWrap = document.getElementById('comp-selector-wrap');
+            const tabsEl       = document.getElementById('comp-selector-tabs');
+            selectorWrap.classList.remove('hidden');
+
+            tabsEl.innerHTML = competitors.map((c, i) => `
+                <button onclick="switchCompetitor(${i})"
+                        id="comp-tab-${i}"
+                        class="${i===0 ? 'comp-tab-active border-b-2 border-indigo-500 text-indigo-700 font-bold' : 'text-slate-500 hover:text-indigo-600'} px-4 py-2 text-sm transition-colors">
+                    ${c.name}
+                    <span class="ml-1 text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">${c.total_reviews}</span>
+                </button>`
+            ).join('');
+
+            // Render first competitor by default
+            ACTIVE_COMP = 0;
+            _renderCompetitorDetail(competitors[0]);
+            lucide.createIcons();
+        }
+
+        function switchCompetitor(idx) {
+            if (!COMP_RESULT) return;
+            ACTIVE_COMP = idx;
+            const competitors = COMP_RESULT.competitors || [];
+            document.querySelectorAll('[id^="comp-tab-"]').forEach((el, i) => {
+                el.className = i === idx
+                    ? 'comp-tab-active border-b-2 border-indigo-500 text-indigo-700 font-bold px-4 py-2 text-sm transition-colors'
+                    : 'text-slate-500 hover:text-indigo-600 px-4 py-2 text-sm transition-colors';
+            });
+            _renderCompetitorDetail(competitors[idx]);
+        }
+
+        function _renderCompetitorDetail(comp) {
+            const panel = document.getElementById('comp-detail-panel');
+            panel.innerHTML = '';
+
+            // ── 1. Feature Gap Analysis ──────────────────────────────────
+            const gapHtml = _buildGapTable(comp);
+            // ── 2. Gap Chart ─────────────────────────────────────────────
+            const gapChartId = 'compGapChart_' + comp.name.replace(/\s+/g,'_');
+            // ── 3. Competitor Weaknesses ─────────────────────────────────
+            const weakHtml = _buildWeaknessCards(comp);
+            // ── 4. Shared Platform Issues ────────────────────────────────
+            const sharedHtml = _buildSharedIssues(comp);
+
+            panel.innerHTML = `
+                <!-- Section 1: Feature Gap -->
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-indigo-500"></i>
+                        Feature Gap Analysis
+                        <span class="text-xs font-normal text-slate-400 ml-1">You vs ${comp.name}</span>
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">Negative mention % comparison per feature. RISK = competitor has meaningfully fewer complaints.</p>
+                    <div class="space-y-2 mb-5">${gapHtml}</div>
+                    <div class="relative h-64 w-full">
+                        <canvas id="${gapChartId}"></canvas>
+                    </div>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- Section 2: Competitor Weaknesses -->
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                        <i data-lucide="target" class="w-4 h-4 text-rose-500"></i>
+                        ${comp.name} — Weakness Radar
+                        <span class="text-xs font-normal text-slate-400 ml-1">Their systemic issues = your USPs</span>
+                    </h3>
+                    <div class="space-y-3 mt-3">${weakHtml}</div>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- Section 3: Shared Platform Issues -->
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                        <i data-lucide="link-2" class="w-4 h-4 text-amber-500"></i>
+                        Shared Platform Issues
+                        <span class="text-xs font-normal text-slate-400 ml-1">Affects both you &amp; ${comp.name}</span>
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-3">These are likely shared logistics or vendor defects — neither side's product fault.</p>
+                    <div class="space-y-3">${sharedHtml}</div>
+                </div>
+            `;
+
+            // Render gap chart after DOM update
+            requestAnimationFrame(() => {
+                const ctx = document.getElementById(gapChartId);
+                if (!ctx) return;
+                if (compGapChartInstance) compGapChartInstance.destroy();
+                const gaps = (comp.feature_gaps || []).filter(g => g.verdict !== 'PARITY').slice(0, 8);
+                compGapChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: gaps.map(g => g.feature),
+                        datasets: [
+                            {
+                                label: 'Your Negative %',
+                                data: gaps.map(g => g.your_neg_pct),
+                                backgroundColor: gaps.map(g => g.verdict === 'RISK' ? '#f43f5e' : '#10b981'),
+                                borderRadius: 4,
+                            },
+                            {
+                                label: `${comp.name} Negative %`,
+                                data: gaps.map(g => g.comp_neg_pct),
+                                backgroundColor: '#94a3b8',
+                                borderRadius: 4,
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'top' },
+                            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.raw}% negative` } }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, max: 100, title: { display: true, text: 'Negative mention %' } }
+                        }
+                    }
+                });
+                lucide.createIcons();
+            });
+        }
+
+        // ── Sub-renderers ───────────────────────────────────────────────────
+
+        function _buildGapTable(comp) {
+            const gaps = comp.feature_gaps || [];
+            if (gaps.length === 0) return '<p class="text-sm text-slate-400">No feature data extracted.</p>';
+
+            return gaps.map(g => {
+                const verdictColor = g.verdict === 'RISK'
+                    ? 'bg-rose-100 text-rose-700 border-rose-200'
+                    : g.verdict === 'ADVANTAGE'
+                    ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                    : 'bg-slate-100 text-slate-500 border-slate-200';
+
+                const verdictIcon = g.verdict === 'RISK' ? 'alert-triangle'
+                    : g.verdict === 'ADVANTAGE' ? 'trophy' : 'minus';
+
+                const gapSign   = g.gap > 0 ? '+' : '';
+                const gapColor  = g.gap > 0 ? 'text-rose-600' : g.gap < 0 ? 'text-emerald-600' : 'text-slate-400';
+                const barYou    = Math.min(g.your_neg_pct, 100);
+                const barComp   = Math.min(g.comp_neg_pct, 100);
+
+                return `
+                <div class="grid grid-cols-12 items-center gap-3 py-2 border-b border-slate-50 last:border-0">
+                    <div class="col-span-2 flex items-center gap-1.5">
+                        <span class="text-xs border px-2 py-0.5 rounded font-bold flex items-center gap-1 ${verdictColor}">
+                            <i data-lucide="${verdictIcon}" class="w-3 h-3"></i>${g.verdict}
+                        </span>
+                    </div>
+                    <div class="col-span-2 text-xs font-bold text-slate-700 truncate" title="${g.feature}">${g.feature}</div>
+                    <div class="col-span-7">
+                        <div class="flex flex-col gap-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-slate-400 w-16 shrink-0 truncate">You</span>
+                                <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div class="h-2 rounded-full ${g.verdict === 'RISK' ? 'bg-rose-400' : 'bg-indigo-400'}" style="width:${barYou}%"></div>
+                                </div>
+                                <span class="text-xs font-mono w-8 text-right text-slate-600">${g.your_neg_pct}%</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-slate-400 w-16 shrink-0 truncate">${g.comp_name}</span>
+                                <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                    <div class="h-2 bg-slate-400 rounded-full" style="width:${barComp}%"></div>
+                                </div>
+                                <span class="text-xs font-mono w-8 text-right text-slate-600">${g.comp_neg_pct}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-span-1 text-right">
+                        <span class="text-xs font-black font-mono ${gapColor}">${gapSign}${g.gap}pp</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function _buildWeaknessCards(comp) {
+            const weaknesses = comp.competitor_weaknesses || [];
+            if (weaknesses.length === 0) {
+                return `<div class="p-4 bg-emerald-50 border border-emerald-100 rounded-lg text-sm text-emerald-700 flex items-center gap-2">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                    No statistically significant issues detected in ${comp.name}'s reviews.
+                </div>`;
+            }
+            return weaknesses.map(w => {
+                const zDisplay = typeof w.z_score === 'number' ? w.z_score.toFixed(2) : w.z_score;
+                const isSystemic = w.status === 'Systemic';
+                return `
+                <div class="flex items-start justify-between p-4 bg-rose-50 border-l-4 border-rose-400 rounded-r-xl shadow-sm">
+                    <div class="flex-1 pr-4">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs font-bold px-2 py-0.5 rounded ${isSystemic ? 'bg-rose-200 text-rose-800' : 'bg-amber-100 text-amber-700'}">${w.status}</span>
+                            <h4 class="text-sm font-bold text-rose-900">${w.feature}</h4>
+                        </div>
+                        <p class="text-xs text-rose-700 mt-0.5">${w.context}</p>
+                        <p class="text-xs text-slate-500 mt-1">Complaints: <strong>${w.current_count}</strong> — Historical mean: ${typeof w.mean === 'number' ? w.mean.toFixed(1) : w.mean}</p>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-2xl font-black text-rose-600">${zDisplay}</div>
+                        <div class="text-xs text-rose-400 font-bold uppercase tracking-wider">Z-Score</div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function _buildSharedIssues(comp) {
+            const issues = comp.shared_platform_issues || [];
+            if (issues.length === 0) {
+                return `<div class="p-4 bg-slate-50 border border-slate-100 rounded-lg text-sm text-slate-500">
+                    No shared platform issues detected between your products and ${comp.name}.
+                </div>`;
+            }
+            return issues.map(i => `
+                <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div class="flex items-start justify-between mb-2">
+                        <h4 class="text-sm font-bold text-amber-900 flex items-center gap-2">
+                            <i data-lucide="link-2" class="w-4 h-4 text-amber-600"></i>
+                            ${i.feature}
+                        </h4>
+                        <span class="text-xs font-bold bg-amber-200 text-amber-800 px-2 py-0.5 rounded">SHARED DEFECT</span>
+                    </div>
+                    <p class="text-xs text-amber-700 mb-2">${i.context}</p>
+                    <div class="flex flex-wrap gap-2">
+                        ${Object.entries(i.occurrence_map || {}).map(([cat, cnt]) =>
+                            `<span class="text-xs bg-white border border-amber-200 text-amber-700 px-2 py-0.5 rounded font-mono">${cat}: ${cnt}×</span>`
+                        ).join('')}
+                    </div>
+                </div>`
+            ).join('');
+        }
+
+        // ── Tab switch override to handle comp tab ID ───────────────────────
+
+    function setAgentBadge(id, text, color) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.className = `text-xs px-2 py-0.5 rounded-full ${color}`;
+}
+
+function disableBtn(id, label) {
+    const b = document.getElementById(id);
+    if (b) { b.disabled = true; b.innerHTML = `<svg class="animate-spin w-4 h-4 inline mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>${label}`; }
+}
+
+function enableBtn(id, icon, label) {
+    const b = document.getElementById(id);
+    if (b) { b.disabled = false; b.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4"></i> ${label}`; lucide.createIcons(); }
+}
+
+        // ── E-Commerce Fetch Modal ───────────────────────────────────────────
+        let _selectedPlatform = 'amazon';
+
+        function openEcomModal() {
+            document.getElementById('ecom-modal').classList.remove('hidden');
+            document.getElementById('ecom-error').classList.add('hidden');
+            selectPlatform('amazon');
+            lucide.createIcons();
+        }
+
+        function closeEcomModal() {
+            document.getElementById('ecom-modal').classList.add('hidden');
+        }
+
+        function selectPlatform(p) {
+            _selectedPlatform = p;
+            const hints = {
+                amazon:   '(ASIN, e.g. B09NZKQLTQ)',
+                flipkart: '(product ID, e.g. MOBG4Q4JNZQBZDNK)',
+                meesho:   '(catalogue ID, e.g. 123456789)',
+            };
+            document.getElementById('ecom-pid-hint').textContent = hints[p] || '';
+            document.getElementById('ecom-amazon-extras').classList.toggle('hidden', p !== 'amazon');
+            document.getElementById('ecom-apikey-wrap').classList.toggle('hidden', p === 'meesho');
+            ['amazon', 'flipkart', 'meesho'].forEach(id => {
+                const btn = document.getElementById(`ecom-btn-${id}`);
+                if (!btn) return;
+                if (id === p) {
+                    btn.classList.add('border-emerald-500', 'bg-emerald-50', 'text-emerald-700');
+                    btn.classList.remove('border-slate-200', 'text-slate-600');
+                } else {
+                    btn.classList.remove('border-emerald-500', 'bg-emerald-50', 'text-emerald-700');
+                    btn.classList.add('border-slate-200', 'text-slate-600');
+                }
+            });
+        }
+
+        async function submitEcomFetch() {
+            const productId = document.getElementById('ecom-product-id').value.trim();
+            const apiKey    = document.getElementById('ecom-api-key').value.trim();
+            const maxPages  = parseInt(document.getElementById('ecom-max-pages').value) || 3;
+            const append    = document.getElementById('ecom-append').checked;
+            const errEl     = document.getElementById('ecom-error');
+            errEl.classList.add('hidden');
+
+            if (!productId) {
+                errEl.textContent = 'Product ID is required.';
+                errEl.classList.remove('hidden');
+                return;
+            }
+            if (_selectedPlatform !== 'meesho' && !apiKey) {
+                errEl.textContent = 'A RapidAPI key is required for Amazon and Flipkart.';
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            const btn = document.getElementById('ecom-submit-btn');
+            btn.disabled = true;
+            btn.innerHTML = `<svg class="animate-spin w-4 h-4 inline mr-1" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/>
+                <path d="M12 2a10 10 0 0 1 10 10"/></svg>Fetching…`;
+
+            const body = {
+                platform:   _selectedPlatform,
+                product_id: productId,
+                max_pages:  Math.min(maxPages, 20),
+                append:     append,
+            };
+            if (apiKey) body.api_key = apiKey;
+            if (_selectedPlatform === 'amazon') {
+                body.country     = document.getElementById('ecom-country').value;
+                body.star_filter = document.getElementById('ecom-star-filter').value;
+            }
+
+            try {
+                const res  = await fetch(`${API_URL}/api/fetch/ecommerce`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify(body),
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    errEl.textContent = data.error || 'Fetch failed. Check the product ID and API key.';
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+
+                updateDataStatus(data.total_loaded);
+                showToast(
+                    `${data.total_fetched} reviews fetched from ${data.platform.charAt(0).toUpperCase() + data.platform.slice(1)} · ${data.total_loaded} total loaded`,
+                    'ok'
+                );
+                closeEcomModal();
+
+            } catch (e) {
+                errEl.textContent = 'Connection error: ' + e.message;
+                errEl.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="download-cloud" class="w-4 h-4"></i> Fetch Reviews`;
+                lucide.createIcons();
+            }
+        }
+
+function renderMd(text) {
+    return (text || '')
+        .replace(/^## (.+)$/gm, '<strong class="block text-slate-800 text-sm mt-3 mb-1">$1</strong>')
+        .replace(/^### (.+)$/gm, '<span class="block text-slate-700 font-semibold mt-2 text-xs">$1</span>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^[-*] (.+)$/gm, '<span class="block pl-3 before:content-[\'•\'] before:mr-1 before:text-emerald-500">$1</span>')
+        .replace(/\n/g, '<br>');
+}
+    </script>
+    
+</body>
+</html>
