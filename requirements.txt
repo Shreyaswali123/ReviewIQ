@@ -11,3 +11,4 @@ google-cloud-language>=2.13.0
 python-dotenv==1.0.0
 pydantic>=2.5.2
 numpy>=2.0.0
+python-multipart>=0.0.9
